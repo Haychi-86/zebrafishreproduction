@@ -1,0 +1,833 @@
+---
+title: "Zf_reproduction_Rmk_final"
+author: "HW, AA, JM"
+date: "2/18/2020"
+output: html_document
+---
+# Zf reproduction analyses.
+
+Here we analyse a number of metrics. Some of the models produce singularity or convergence warnings but these can be ignored, as they are driven by our random effect structures which are structural as pertaining to the design of our experiment. 
+
+Note also that some code (e.g. common garden analyses) for analyses presented in the manuscript is excluded here as it is repetitive and causes an extremely long script file. Please contact the corresponding author if you would like a complete version of the code. 
+
+## Recruit survival
+
+### Recruit survival packages and data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# clear environment, create folder structure and load packages
+rm(list = ls())
+#setwd("C:Users/...") # Set the directory to your location of choice
+dir.create("DATA")               # Create directory structure - place data files in the DATA folder
+dir.create("DATA/INPUTS")
+dir.create("OUTPUT")
+dir.create("OUTPUT/FIGURES")
+dir.create("OUTPUT/ANALYSISOUTPUT")
+#list.dirs()                    # look at directory structure
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(effects)
+library(MuMIn)
+library(bbmle)
+library(psych) #Calls: pairs.panels
+library(car) #Calls: vif
+library(plyr) #Calls: rbind.fill
+library(ggforce)
+library(drc)
+```
+
+Now lets prepare the data
+
+```{r}
+
+
+RecruitSurvivalData <- read.csv("DATA/Wootton et al zf repro recruit surv data.csv")
+
+# remove any missing datapoints
+
+RecruitSurvivalData <- na.omit(RecruitSurvivalData)
+
+# order the generation factor (Pgen)
+
+RecruitSurvivalData$Pgen <- ordered(RecruitSurvivalData$Pgen, levels = c("F1", "F2", "F3", "F4", "F5", "CG1", "CG2"))
+
+# generate recruit survival as a propotion of the carrying capacity of our populations. This is for below analysis.
+
+RecruitSurvivalData$RecSurvProp <- RecruitSurvivalData$Recruit.Surv/250
+
+# plot recruit survival
+RecSurvplot <- ggplot(data= RecruitSurvivalData, aes(x = Pgen, y = RecSurvProp, group= Population, colour = Temperature) ) +  scale_colour_manual(values = c( "red" ,"deepskyblue"))+ 
+  geom_point(aes(shape=Selection)) + geom_line() + theme_bw() + theme( panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))  + 
+  ggtitle("survival") + facet_grid(Temperature~.)
+
+RecSurvplot
+
+# prepare the data for the two analyses
+
+RSurvDataF4 <- RecruitSurvivalData[ which(RecruitSurvivalData$Pgenn == "4" ),]  
+RSurvDataF5 <- RecruitSurvivalData[ which(RecruitSurvivalData$Pgenn == "5" ),]  
+
+RSurvGenData <- RecruitSurvivalData[with(RecruitSurvivalData, Temperature == "H" & Pgenn > "2"),]
+
+# save the data 
+save(RecruitSurvivalData, file = "DATA/INPUTS/RecruitSurvivalData")
+save(RSurvDataF4, file = "DATA/INPUTS/RSurvDataF4")
+save(RSurvDataF5, file = "DATA/INPUTS/RSurvDataF5")
+save(RSurvGenData, file = "DATA/INPUTS/RSurvGenData")
+
+```
+
+### Recruit survival analysis
+
+```{r}
+
+load(file = "DATA/INPUTS/RecruitSurvivalData")
+load(file = "DATA/INPUTS/RSurvDataF4")
+load(file = "DATA/INPUTS/RSurvDataF5")
+load(file = "DATA/INPUTS/RSurvGenData")
+
+# lets compare the average proportion of recruit survival between the groups of interest below.
+
+# now lets model recruit survival between temperatures in generation F4.
+
+# first calculate average proportion of recruit survival 
+
+tapply(X=RSurvDataF4$Recruit.Surv, INDEX=list(RSurvDataF4$Temperature), FUN=mean, na.rm = TRUE)
+
+# now apply two prioportion z test
+
+TempF4Test <- prop.test(x = c(163.444, 250), n = c(250, 250), alternative = "less")
+
+# Print results
+
+TempF4Test 
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(163.444, 250) out of c(250, 250)
+#X-squared = 102.27, df = 1, p-value < 2.2e-16
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.0000000 -0.2927303
+#sample estimates:
+#  prop 1   prop 2 
+#0.653776 1.000000 
+
+# and between temperatures in generation F5.
+
+tapply(X=RSurvDataF5$Recruit.Surv, INDEX=list(RSurvDataF5$Temperature), FUN=mean, na.rm = TRUE)
+
+# now apply two prioportion z test
+
+TempF5Test <- prop.test(x = c(128.3333, 250), n = c(250, 250), alternative = "less")
+
+# Print results
+
+TempF5Test 
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(128.3333, 250) out of c(250, 250)
+#X-squared = 158.16, df = 1, p-value < 2.2e-16
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.0000000 -0.4306705
+#sample estimates:
+#   prop 1    prop 2 
+#0.5133332 1.0000000 
+
+# lets look at recruit survival throuth time (in hot populations only)
+
+tapply(X=RSurvGenData$Recruit.Surv, INDEX=list(RSurvGenData$Pgen), FUN=mean, na.rm = TRUE)
+
+
+# now apply two prioportion z test to test between survival in F4 and F5
+
+GenTestF4F5 <- prop.test(x = c(128.3333, 163.4444), n = c(250, 250), alternative = "less")
+
+# Print results
+
+GenTestF4F5 
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(128.3333, 163.4444) out of c(250, 250)
+#X-squared = 9.576, df = 1, p-value = 0.0009857
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.00000000 -0.06465829
+#sample estimates:
+#   prop 1    prop 2 
+#0.5133332 0.6537776 
+
+# finally, lets look at any differences between average recruit survival between selection treatments in the hot populations. 
+
+# first in generation F4.
+tapply(X=RSurvDataF4$Recruit.Surv, INDEX=list(RSurvDataF4$Selection, RSurvDataF4$Temperature), FUN=mean, na.rm = TRUE)
+#         H   L
+#C 174.6667 250
+#G 165.3333 250
+#S 150.3333 250 
+
+SelF4Test <- prop.test(x = c(174.6667, 165.3333, 150.3333), n = c(250, 250, 250))
+ 
+# Print results
+
+SelF4Test 
+#	3-sample test for equality of proportions without continuity correction
+
+#data:  c(174.6667, 165.3333, 150.3333) out of c(250, 250, 250)
+#X-squared = 5.3264, df = 2, p-value = 0.06973
+#alternative hypothesis: two.sided
+#sample estimates:
+#   prop 1    prop 2    prop 3 
+#0.6986668 0.6613332 0.6013332 
+
+# next in generation F5.
+
+tapply(X=RSurvDataF5$Recruit.Surv, INDEX=list(RSurvDataF5$Selection, RSurvDataF4$Temperature), FUN=mean, na.rm = TRUE)
+#         H   L
+#C 131.0000 250
+#G 144.6667 250
+#S 109.3333 250
+
+SelF5Test <- prop.test(x = c(131.0000, 144.6667, 109.3333), n = c(250, 250, 250))
+
+# Print results
+
+SelF5Test 
+#	3-sample test for equality of proportions without continuity correction
+
+#data:  c(131, 144.6667, 109.3333) out of c(250, 250, 250)
+#X-squared = 10.165, df = 2, p-value = 0.006203
+#alternative hypothesis: two.sided
+#sample estimates:
+#   prop 1    prop 2    prop 3 
+#0.5240000 0.5786668 0.4373332 
+
+# we have differing average recruit survival between selection types in the f5 generation (in hot populations)
+
+# next we test specific differences between selection treatments (2 way tests)
+SelF5CG <- prop.test(x = c(131.0000, 144.6667), n = c(250, 250), alternative = "less")
+SelF5CG
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(131, 144.6667) out of c(250, 250)
+#X-squared = 1.2972, df = 1, p-value = 0.1274
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.000000  0.022394
+#sample estimates:
+#   prop 1    prop 2 
+#0.5240000 0.5786668 
+
+SelF5CS <- prop.test(x = c(109.3333, 131.0000 ), n = c(250, 250), alternative = "less")
+SelF5CS
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(109.3333, 131) out of c(250, 250)
+#X-squared = 3.422, df = 1, p-value = 0.03217
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.000000000 -0.009438709
+#sample estimates:
+#   prop 1    prop 2 
+#0.4373332 0.5240000 
+
+SelF5GS <- prop.test(x = c(109.3333, 144.6667), n = c(250, 250), alternative = "less")
+SelF5GS
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(109.3333, 144.6667) out of c(250, 250)
+#X-squared = 9.4327, df = 1, p-value = 0.001066
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.00000000 -0.06452142
+#sample estimates:
+#   prop 1    prop 2 
+#0.4373332 0.5786668  
+
+# Now in the first common garden generation (CG1)
+
+tapply(X=RSurvGenData$Recruit.Surv, INDEX=list(RSurvGenData$Pgen), FUN=mean, na.rm = TRUE)
+
+# now apply two prioportion z test to test between survival in F5 and CG1
+
+GenTestF5CG1 <- prop.test(x = c(128.3333, 250), n = c(250, 250), alternative = "less")
+
+# Print results
+
+GenTestF5CG1 
+#	2-sample test for equality of proportions with continuity correction
+
+#data:  c(128.3333, 250) out of c(250, 250)
+#X-squared = 158.16, df = 1, p-value < 0.00000000000000022
+#alternative hypothesis: less
+#95 percent confidence interval:
+# -1.0000000 -0.4306705
+#sample estimates:
+#   prop 1    prop 2 
+#0.5133332 1.0000000 
+
+```
+
+
+##  Egg size (yolk diameter)
+
+### Egg size packages and data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# clear environment, create folder structure and load packages
+rm(list = ls())
+#setwd("C:Users/...") # Set the directory to your location of choice
+dir.create("DATA")               # Create directory structure - place data files in the DATA folder
+dir.create("DATA/INPUTS")
+dir.create("OUTPUT")
+dir.create("OUTPUT/FIGURES")
+dir.create("OUTPUT/ANALYSISOUTPUT")
+#list.dirs()                    # look at directory structure
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(effects)
+library(MuMIn)
+library(bbmle)
+library(tidyverse)
+library(ggforce)
+library(lmerTest)
+```
+
+Now lets go ahead and prepare the data
+
+```{r}
+
+# load data
+EggSizeData <- read.csv("DATA/Wootton et al zf repro egg size data.csv")
+
+# format data
+
+EggSizeData$Temperature <- as.factor(EggSizeData$Temperature)
+
+EggSizeData$Temperature <- relevel(EggSizeData$Temperature , ref="L")
+
+# create boxplots to look at data
+boxplot(Size~Pgen*Selection,EggSizeData[EggSizeData$Temperature=='L',], main= "Cold")
+boxplot(Size~Pgen*Selection,EggSizeData[EggSizeData$Temperature=='H',], main= "Hot")
+
+tapply(X=EggSizeData$Size, INDEX=list(EggSizeData$Population, EggSizeData$Pgen), length)
+
+save(EggSizeData, file = "DATA/INPUTS/EggSizeData")
+
+```
+
+
+### Egg size analysis
+
+```{r}
+
+load(file = "DATA/INPUTS/EggSizeData")
+
+# We apply a lmer to egg size data across generations in our experiment. We look at saturated combinations of the fixed effects Temperature, Selection and Pgen (continuous) and Random effects are (categorical) Pgen, Tank, Population and Dish. Treating Pgen as a continuous fixed effect and categorical random effect allows us to investigate trends in egg size across generations while allowing for some inter-generational random variation. We do not apply random effect model selection as we consider this structure to be representative of the structural design of our experiment. Note that Pgenn refers to generation (numeric) and Pgen refers to generation (categorical) factors.
+
+# include random intercept of generation into the models below...
+
+ES1 <- lmer(Size ~   Temperature * Selection * Pgenn + (1|Pgen) + (1|Tank) + (1|Population) + (1|Dish), data=EggSizeData, REML= T) 
+
+summary(ES1)
+
+plot(ES1) # check resid spread - some evidence of heteroscedasticity 
+
+qqnorm(residuals(ES1))
+
+#log transform the response (Size) to deal with heteroscedasticity
+ES2 <- lmer(log(Size) ~   Temperature * Selection * Pgenn + (1|Pgen) + (1|Tank) + (1|Population) + (1|Dish), data=EggSizeData, REML= T) 
+
+summary(ES2)
+
+plot(ES2) # check resid spread
+qqnorm(residuals(ES2))
+
+#now go ahead with model selection
+options(na.action=na.fail) # need to run this before dredge
+
+ES2a <- lmer(log(Size) ~   Temperature * Selection * Pgenn  + (1|Pgen) + (1|Tank) + (1|Population) + (1|Dish), data=EggSizeData, REML= F)
+
+summary(ES2a)
+
+# dredge the model 
+ES2adredge<-dredge(ES2a,trace=2)
+
+subset(ES2adredge, delta <3)
+#Model selection table 
+#     (Int)       Pgn Slc Tmp Pgn:Tmp Slc:Tmp df   logLik     AICc delta weight
+#5  -0.3431                 +                  7 6513.221 -13012.4  0.00  0.378
+#22 -0.3077 -0.010100       +       +          9 6514.488 -13010.9  1.48  0.180
+#6  -0.3202 -0.006546       +                  8 6513.470 -13010.9  1.51  0.178
+#39 -0.3393             +   +               + 11 6516.185 -13010.3  2.10  0.132
+#7  -0.3386             +   +                  9 6514.172 -13010.3  2.11  0.132
+
+# model 5 is the best but model 22, which includes an interaction between generation and temperature, is close
+
+# include the best performing model
+ES2abest <- lmer(log(Size) ~   Temperature  + (1|Pgen) + (1|Tank) + (1|Population) + (1|Dish), data=EggSizeData, REML= T)  
+
+summary(ES2abest)
+#Fixed effects:
+#              Estimate Std. Error        df t value Pr(>|t|)    
+#(Intercept)  -0.343064   0.013215  4.041561 -25.960  1.2e-05 ***
+#TemperatureH  0.039575   0.008148 15.965262   4.857 0.000176 ***
+
+plot(allEffects(ES2abest)) # visualise effects of the best model
+
+```
+
+## Egg size CV
+
+
+Now lets calculate CV of egg size (Yolk diameter in mm) in each dish x pop x generation and model that in the same way as before (use same data subsetting and formatting as yolk size).
+
+### Egg size CV packages and data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# clear environment, create folder structure and load packages
+rm(list = ls())
+#setwd("C:Users/...") # Set the directory to your location of choice
+dir.create("DATA")               # Create directory structure - place data files in the DATA folder
+dir.create("DATA/INPUTS")
+dir.create("OUTPUT")
+dir.create("OUTPUT/FIGURES")
+dir.create("OUTPUT/ANALYSISOUTPUT")
+#list.dirs()                    # look at directory structure
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(effects)
+library(MuMIn)
+library(bbmle)
+library(ggforce)
+```
+
+Now lets prepare the data. This builds upon data already analysed in Egg size analysis
+
+```{r}
+
+# load Egg size data - need to run the above 'Egg size packages and data" section above first to get data in the correct format
+
+load(file = "DATA/INPUTS/EggSizeData")
+
+# function to calcuate CV
+
+CVFunctWrap <- function (data, plot = FALSE) {
+  
+  CV <-  (sd(data$Size)/mean(data$Size))*100
+  data.frame(nObs = nrow(data),  CV = CV)
+}
+
+# calcuate CV
+
+Cvdata     <-  plyr::ddply(EggSizeData , .(Pgen, Pgenn, Population), CVFunctWrap)
+
+# now merge with a dummy dataframe to give factorial information
+
+dummydata <- read.csv("DATA/Wootton et al zf repro dummydata.csv")
+
+CVData <- merge(Cvdata, dummydata)
+
+# format data
+
+CVData$Temperature <- as.factor(CVData$Temperature)
+
+CVData$Temperature <- relevel(CVData$Temperature , ref="L")
+
+save(CVData, file = "DATA/INPUTS/CVData")
+
+```
+
+### Egg size CV analysis
+
+```{r}
+
+load(file = "DATA/INPUTS/CVData")
+
+#now run model selection as in the above egg size analyses
+
+CV <- lmer(CV ~   Temperature * Selection * Pgenn + (1|Pgen) + (1|Tank) + (1|Population) , data=CVData, REML= T) 
+
+summary(CV)
+
+plot(CV) # check resid spread 
+
+qqnorm(residuals(CV))
+
+#now go ahead with model selection
+options(na.action=na.fail) # need to run this before dredge
+
+CVa <- lmer(log(CV) ~   Temperature * Selection * Pgenn + (1|Pgen) + (1|Tank) + (1|Population) , data=CVData, REML= F) 
+
+summary(CVa)
+
+CVadredge<-dredge(CVa,trace=2)
+
+subset(CVadredge, delta <3)
+#Model selection table 
+#  (Int)     Pgn Slc Tmp   df logLik  AICc delta weight
+#1 1.910                   5 21.906 -32.9  0.00  0.510
+#2 1.819 0.02599           6 22.262 -31.2  1.68  0.220
+#5 1.909               +   6 21.906 -30.5  2.39  0.154
+#3 1.881           +       7 22.846 -29.9  2.98  0.115
+
+CVabest <- lmer(log(CV) ~   1 + (1|Pgen) + (1|Tank) + (1|Population) , data=CVData, REML= T) 
+
+summary(CVabest)
+#Fixed effects:
+ #           Estimate Std. Error      df t value Pr(>|t|)    
+#(Intercept)  1.90962    0.04262 3.39955    44.8 7.82e-06 ***
+
+# no plot as intercept only is best model
+#plot(allEffects(CVabest)) # visualise effects of the best model
+
+```
+
+## Early life-history survival (survival to day 3)
+
+### Early life-history survival packages and data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# clear environment, create folder structure and load packages
+rm(list = ls())
+#setwd("C:Users/...") # Set the directory to your location of choice
+dir.create("DATA")               # Create directory structure - place data files in the DATA folder
+dir.create("DATA/INPUTS")
+dir.create("OUTPUT")
+dir.create("OUTPUT/FIGURES")
+dir.create("OUTPUT/ANALYSISOUTPUT")
+#list.dirs()                    # look at directory structure
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(effects)
+library(MuMIn)
+library(bbmle)
+#library(psych) #Calls: pairs.panels
+library(car) #Calls: vif
+library(plyr) #Calls: rbind.fill
+library(ggforce)
+```
+
+Now lets prepare the data
+
+```{r}
+
+ELHSurvivalData <- read.csv("DATA/Wootton et al zf repro egg surv data.csv")
+
+# to look at survival to day 3 -  select only day three and exclude days as a factor in the analysis
+ELHSurvdataday3 <-  ELHSurvivalData[ which(ELHSurvivalData$days.since.spawned == "3" ),] 
+ELHSurvdataday3 <- ELHSurvdataday3  %>% filter (Pgenn < "6" ) # exclude common garden data
+# remove the missing datapoint
+
+apply(ELHSurvdataday3, 2, function(x) any(is.na(x)))
+ELHSurvdataday3 <- na.omit(ELHSurvdataday3)
+apply(ELHSurvdataday3, 2, function(x) any(is.na(x)))
+
+# scale the continuous variable of egg number spawned (to aid model convergence and aid interpretation of interaction and polynomial terms (Morrongiello and Thresher 2015))
+
+ELHSurvdataday3$SIncubation.density <- scale(ELHSurvdataday3$Incubation.density)
+ELHSurvdataday3$SIncubation.density <- as.vector(ELHSurvdataday3$SIncubation.density )
+
+# format data
+
+ELHSurvdataday3$Temperature <- as.factor(ELHSurvdataday3$Temperature)
+
+ELHSurvdataday3$Temperature <- relevel(ELHSurvdataday3$Temperature , ref="L")
+
+#plot survival
+Day3Survplot <- ggplot(data= ELHSurvdataday3, aes(x = Pgen, y = Pr_Alive/Incubation.density, group= Population, colour = Temperature) ) +  scale_colour_manual(values = c( "red" ,"deepskyblue"))+ 
+  geom_point(aes(shape=Selection)) + geom_line() + theme_bw() + theme( panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))  + 
+  ggtitle("survival") + facet_grid(Temperature~.)
+
+Day3Survplot
+
+save(ELHSurvdataday3, file = "DATA/INPUTS/ELHSurvdataday3")
+
+```
+
+### Early life-history survival analysis
+
+```{r}
+
+load(file = "DATA/INPUTS/ELHSurvdataday3")
+
+# survival to day 3 base model. We apply a binomial glmer to survival data to day 3. We look at saturated combinations of the fixed effects Temperature, Selection and Pgen (continuous) and  Random effects are (categorical) Pgen, Tank and Population. Treating Pgen as a continuous fixed effect and categorical random effect allows us to investigate trends in survival across generations while allowing for some inter-generational random variation. 
+
+Surv3 <- glmer(cbind(total_alive , Incubation.density - total_alive) ~ Temperature * Selection * Pgenn + SIncubation.density*Temperature  +  (1|Pgenn) + (1|Tank) + (1|Population), family = binomial(link = "log"), data = ELHSurvdataday3)
+
+summary(Surv3)
+
+# first we need to check for overdispersion
+overdisp_fun <- function(model) {
+    rdf <- df.residual(model)
+    rp <- residuals(model,type="pearson")
+    Pearson.chisq <- sum(rp^2)
+    prat <- Pearson.chisq/rdf
+    pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+    c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+
+overdisp_fun(Surv3)
+#     chisq      ratio        rdf          p 
+#2563.23764   35.60052   72.00000    0.00000  
+# model is overdispersed
+
+# thus, we need to create a observation level random effect to deal with overdispersion
+
+ELHSurvdataday3$olre <- c(1:89) # add observation level random effect and turn it into a factor
+ELHSurvdataday3$olre <- as.factor(ELHSurvdataday3$olre)
+
+# check if we need to include the full random effect structure or only the observation level random effect
+
+Surv3a <- glmer(cbind(total_alive , Incubation.density - total_alive) ~ Temperature * Selection * Pgenn + SIncubation.density*Temperature  +  (1|olre) , family = binomial(link = "log"), data = ELHSurvdataday3)
+summary(Surv3a)
+
+Surv3b <- glmer(cbind(total_alive , Incubation.density - total_alive) ~ Temperature * Selection * Pgenn + SIncubation.density*Temperature  +  (1|Pgenn) + (1|Tank) + (1|Population) + (1|olre), family = binomial(link = "log"), data = ELHSurvdataday3)
+summary(Surv3b)
+
+# check which model is better
+AICctab(Surv3a, Surv3b, base= T, logLik= T)
+
+#       logLik AICc   dLogLik dAICc  df
+#Surv3a -551.5 1139.6    0.0     0.0 15
+#Surv3b -551.0 1147.7    0.5     8.1 18
+# Surv3a is a better model and it explains far more variance, we can discount other random effects
+
+# check if this model is overdispersed
+
+overdisp_fun(Surv3a)
+#     chisq      ratio        rdf          p 
+#18.1030840  0.2446363 74.0000000  1.0000000
+# model is not overdispersed so we continue with model selection
+
+options(na.action=na.fail)
+
+# dredge the model
+Survd3adredge<-dredge(Surv3a,trace=2)
+
+subset(Survd3adredge, delta <3)  
+#Model selection table 
+#      (Int)     Pgn  SIn.dns Tmp Pgn:Tmp SIn.dns:Tmp df   logLik   AICc delta weight
+#141 -0.7265         -0.02620   +                   +  5 -554.119 1119.0  0.00  0.170
+#142 -0.9626 0.07758 -0.07094   +                   +  6 -552.992 1119.0  0.05  0.166
+#14  -0.9732 0.07918 -0.16280   +                      5 -554.475 1119.7  0.71  0.119
+#13  -0.7324         -0.11950   +                      4 -555.614 1119.7  0.74  0.117
+#6   -1.0960 0.08331 -0.17280                          4 -555.833 1120.1  1.18  0.094
+# note the top models are very similar
+
+# input the best model from the above dredge 
+
+Surv3abest <- glmer(cbind(total_alive , Incubation.density - total_alive) ~ Temperature*SIncubation.density + (1|olre), family = binomial(link = "log"), data = ELHSurvdataday3)
+
+summary(Surv3abest)
+#Fixed effects:
+#                                 Estimate Std. Error z value Pr(>|z|)    
+#(Intercept)                      -0.72649    0.09469  -7.672 1.69e-14 ***
+#TemperatureH                     -0.22954    0.13522  -1.698   0.0896 .  
+#SIncubation.density              -0.02620    0.08640  -0.303   0.7617    
+#TemperatureH:SIncubation.density -0.24307    0.14008  -1.735   0.0827 .  
+
+plot(allEffects(Surv3abest)) # gives good visual of parameter estimates
+
+```
+
+## Development rate (time to H50)
+
+Now lets look at development rate (time to 50% hatch) - to do this we need to first model or plot hatch pr for each of our populations, then extract the time at which each pop crosses the 50% hatch threshold (this assumes constant hatch rate across days). 
+
+We include a fixed effect of the number of eggs spawned as this may affect hatch rate. We allow this to interact with temperature alone as this relationship may differ at the different temperatures but we believe should not be affected by selection. The effect of the number of eggs is taken up by the Dish random effect in the relevant analyses above.
+
+### Development rate packages and data 
+ 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# clear environment, create folder structure and load packages
+rm(list = ls())
+#setwd("C:Users/...") # Set the directory to your location of choice
+dir.create("DATA")               # Create directory structure - place data files in the DATA folder
+dir.create("DATA/INPUTS")
+dir.create("OUTPUT")
+dir.create("OUTPUT/FIGURES")
+dir.create("OUTPUT/FIGURES/H50GRAPHS")
+dir.create("OUTPUT/ANALYSISOUTPUT")
+#list.dirs()                    # look at directory structure
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(effects)
+library(MuMIn)
+library(bbmle)
+library(psych) #Calls: pairs.panels
+library(car) #Calls: vif
+library(plyr) #Calls: rbind.fill
+library(drc)
+library(nlstools)
+library(FSA)
+library(ggforce)
+```
+
+now lets prepare the data
+
+```{r}
+
+Devmoddata <- read.csv("DATA/Wootton et al zf repro egg surv data.csv")
+
+Devmoddata <- Devmoddata  %>% filter (Pgenn < "6" )
+
+# remove missing data
+
+Devmoddata <- na.omit(Devmoddata)
+
+# plot raw Dev data
+
+DevPlot <- ggplot(data = Devmoddata , aes(x= days.since.spawned, y = Hatch_Pr , group = Population, colour = Temperature)) +
+  geom_point() + geom_line() + facet_grid(Tank~Pgen )
+DevPlot
+# note that the differing amounts of data (in days.since.spawned between temperatures in two of the generations) are taken into account by applying the same analyses as below on truncated datasets where data is analysed up to day three across treatment levels. We see qualitatively the same results (see manuscript).
+
+# ddply function to first model hatch (linear model), then pull coefficients and then pull time (in days) to 50% hatch
+
+# store global functions to use later
+H50Plot<- function(day, Hatch, xx, P1){
+  plot(  day, Hatch, xlab="Day",ylab="Hatch",main="")
+  lines(xx,P1)
+}
+
+toDev  <-  function (expr, dev, filename, ..., verbose = TRUE) {
+  if (verbose) {
+    cat(sprintf('Creating %s\n', filename))
+  }
+  dev(filename, ...)
+  on.exit(dev.off())
+  eval.parent(substitute(expr))
+}
+
+toSvg  <-  function (expr, filename, ...) {
+  toDev(expr, svg, filename, ...)
+}
+
+# this uses the drm function which is dose response model (fits a logistic curve to our data) - the 4 parameter model (where ED50 is estimated as a parameter) is chosen as this is more appropriate for small datasets (where normal distribution of parameter estimate may more reasonably be assumed on a logarithm-transformed dose scale than the original dose scale) Ritz et. al (2015)
+DRMTime50hatchFunctWrap <- function (data, plot = TRUE) {
+  
+  day <- data$days.since.spawned
+  Hatch <-  data$Hatch_Pr
+  
+  drmmod<- try(drm(Hatch_Pr~ days.since.spawned, data = data, fct = LL.4() ))
+  if (!inherits(drmmod, 'try-error')) {
+    drmmodcoef<- coef(drmmod)
+    
+    drmmodDose <- try(predict(drmmod, data.frame(Hatch_Pr = c(0.5))))
+    
+    xx <- seq(0,max(day),by=0.1)
+    
+    P1 <- try(predict(drmmod, newdata = data.frame(days.since.spawned = seq(0,max(day),by=0.1))))
+    
+    if(is.na(drmmodcoef[2]) == TRUE) {
+      data.frame(Intercept = NA, Slope = NA, Predict50Hatch = NA)
+    } else {
+      
+      if (plot) {
+        out <- sprintf('OUTPUT/FIGURES/H50GRAPHS/Pgen[%s]-Population[%s].svg', unique(data$Pgen), unique(data$Population))
+        try(toSvg(H50Plot(day= day, Hatch = Hatch, xx = xx, P1 =P1 ), filename = out, width = 9, height = 4.5))
+      }
+      data.frame(Interceptb = drmmodcoef[1], Interceptd = drmmodcoef[2], Intercepte = drmmodcoef[3], Predict50Hatch = drmmodcoef[4])
+    }
+  }
+} 
+
+
+ModelledDevData     <-  plyr::ddply(Hatchmoddata , .( Pgen, Pgenn, Population, Incubation.density), DRMTime50hatchFunctWrap)
+
+# now merge the resulting dataframe with a dummy dataset with factors of interest for modelling 
+
+dummydata <- read.csv("DATA/Wootton et al zf repro dummydata.csv")
+
+DevtimeData <- merge(ModelledDevData, dummydata)
+
+# scale continuous variables
+DevtimeData$SIncubation.density <- scale(DevtimeData$Incubation.density)
+
+# check it all worked
+tapply(X=DevtimeData$Predict50Hatch, INDEX=list(DevtimeData$Population, DevtimeData$Pgen), length)
+
+save(DevtimeData, file = "DATA/INPUTS/DevtimeData")
+
+```
+
+### Hatch rate analysis
+
+```{r}
+
+load(file = "DATA/INPUTS/DevtimeData")
+
+# format data
+
+DevtimeData$Temperature <- as.factor(DevtimeData$Temperature)
+
+DevtimeData$Temperature <- relevel(DevtimeData$Temperature , ref="L")
+
+# now model development rate (estimated) as a function of factors of interest
+
+DevMod <- lmer(Predict50Hatch ~ Temperature * Selection * Pgenn + Temperature*SIncubation.density  + (1|Pgen) + (1|Tank) + (1|Population) , data = DevtimeData, REML= T)
+
+summary(DevMod)
+
+plot(DevMod) # check resid spread - 
+
+qqnorm(residuals(DevMod))
+
+#now go ahead with model selection
+options(na.action=na.fail) # need to run this before dredge
+
+DevModa <- lmer(Predict50Hatch ~ Temperature * Selection * Pgenn + Temperature*SIncubation.density  + (1|Pgen) + (1|Tank) + (1|Population) , data = DevtimeData, REML= F) 
+
+summary(DevModa)
+
+DevModadredge<-dredge(DevModa,trace=2)
+
+subset(DevModadredge, delta <3)
+#Model selection table 
+#   (Int)     Pgn  SIn.dns Tmp Pgn:Tmp df  logLik  AICc delta weight
+#42 2.709 0.11000            +       +  8 -42.168 102.1  0.00  0.354
+#46 2.634 0.13330 -0.06736   +       +  9 -41.356 103.0  0.85  0.231
+#9  3.039                    +          6 -45.003 103.0  0.90  0.226
+#13 3.035         -0.04489   +          7 -44.660 104.7  2.57  0.098
+#10 2.893 0.04864            +          7 -44.725 104.8  2.70  0.092
+
+DevModabest <- lmer(Predict50Hatch ~ Temperature * Pgenn + (1|Pgen) + (1|Tank) + (1|Population) , data = DevtimeData, REML = T)  
+
+summary(DevModabest)
+#Fixed effects:
+#                   Estimate Std. Error       df t value Pr(>|t|)    
+#(Intercept)         2.70858    0.28638  3.81761   9.458  0.00087 ***
+#TemperatureH       -0.53716    0.18799 41.00140  -2.857  0.00668 ** 
+#Pgenn               0.10999    0.08563  3.70311   1.284  0.27345    
+#TemperatureH:Pgenn -0.12543    0.05491 66.78186  -2.284  0.02554 * 
+
+plot(allEffects(DevModabest)) # gives good visual of parameter estimates
+
+```
+
+### References
+
+```{r}
+
+# Morrongiello JR, Thresher RE (2015) A statistical framework to explore ontogenetic growth variation among individuals and populations: a marine fish example. Ecol Monogr 85:93-115. doi:10.1890/13-2355.1
+
+```
+
+
+
